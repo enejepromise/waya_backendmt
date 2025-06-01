@@ -4,6 +4,7 @@ from decouple import config, Csv
 import dj_database_url
 import ssl
 import certifi
+import os
 
 # Base directory of the project
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -101,12 +102,17 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'waya_backend.wsgi.application'
 
-# Database configuration
-ssl_require = not DEBUG
+# Database configuration with SSL fix for localhost
+DATABASE_URL = config('DATABASE_URL')
+
+if 'localhost' in DATABASE_URL or '127.0.0.1' in DATABASE_URL:
+    ssl_require = False
+else:
+    ssl_require = not DEBUG
 
 DATABASES = {
     'default': dj_database_url.parse(
-        config('DATABASE_URL'),
+        DATABASE_URL,
         conn_max_age=600,
         ssl_require=ssl_require
     )
@@ -132,11 +138,20 @@ USE_I18N = True
 USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
-STATIC_URL = '/static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'  # For collectstatic
+#STATIC_URL = '/static/'
+#STATIC_ROOT = os.path.join(BASE_DIR / "staticfiles") 
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+#STATICFILES_DIRS = [BASE_DIR / 'static']  # For collectstatic
 
-# Media files
+# URL to use when referring to static files (browser)
+STATIC_URL = '/static/'
+
+# Path where collectstatic will gather all static files for production
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Optional: Add this only if you plan to keep a 'static' folder for custom files in development
+#STATICFILES_DIRS = [BASE_DIR / 'static',]
+
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
