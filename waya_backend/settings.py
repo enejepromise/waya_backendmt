@@ -1,24 +1,20 @@
 from pathlib import Path
-import os
 from datetime import timedelta
 from decouple import config, Csv
-from dotenv import load_dotenv
 import dj_database_url
 import ssl
 import certifi
 
-# Load .env variables (for local development)
-load_dotenv()
-
+# Base directory of the project
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('SECRET_KEY')
 
 # DEBUG mode: False in production, True in development
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-# Allowed hosts for your app
+DOMAIN = 'waya-fawn.vercel.app'
+
 ALLOWED_HOSTS = config(
     'ALLOWED_HOSTS',
     default='localhost,127.0.0.1',
@@ -27,15 +23,16 @@ ALLOWED_HOSTS = config(
 
 # Application definition
 INSTALLED_APPS = [
+    # Django default apps
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'django_celery_beat',
 
     # Third-party apps
+    'django_celery_beat',
     'rest_framework',
     'rest_framework.authtoken',
     'dj_rest_auth',
@@ -60,18 +57,19 @@ AUTH_USER_MODEL = 'users.User'
 
 # === Allauth + dj-rest-auth settings ===
 ACCOUNT_LOGIN_METHODS = {'email'}
-ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']  # Asterisks indicate required fields
-ACCOUNT_USER_MODEL_USERNAME_FIELD = None
+ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']
 ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
 ACCOUNT_LOGOUT_ON_PASSWORD_CHANGE = True
+ACCOUNT_USER_MODEL_USERNAME_FIELD = None  # No username field
 
 REST_AUTH_REGISTER_SERIALIZERS = {
     'REGISTER_SERIALIZER': 'users.serializers.UserRegistrationSerializer',
 }
 
+# Middleware configuration
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',  # For serving static files
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # For static files
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -84,10 +82,11 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'waya_backend.urls'
 
+# Templates configuration
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [os.path.join(BASE_DIR, 'templates')],
+        'DIRS': [BASE_DIR / 'templates'],  # Use Pathlib consistently
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -102,22 +101,18 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'waya_backend.wsgi.application'
 
-# Database configuration with SSL enabled in production
-ssl_require = not DEBUG  # SSL required in production
+# Database configuration
+ssl_require = not DEBUG
 
-#DATABASES = {
-   # 'default': dj_database_url.config(
-    #    default=config('DATABASE_URL'),
-     #   conn_max_age=600,
-      #  ssl_require=ssl_require
-    #)
-#}
-# RENDER cloud Postgres database
 DATABASES = {
-    'default': dj_database_url.parse(config("DATABASE_URL"), conn_max_age=600, ssl_require=True)
-    }
+    'default': dj_database_url.parse(
+        config('DATABASE_URL'),
+        conn_max_age=600,
+        ssl_require=ssl_require
+    )
+}
 
-# Celery settings - update CELERY_BROKER_URL in production environment variables
+# Celery configuration
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
@@ -136,30 +131,32 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
-# Static & Media Files
+# Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')  # Required for collectstatic
+STATIC_ROOT = BASE_DIR / 'staticfiles'  # For collectstatic
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
+# Media files
 MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Email Configuration for SendGrid
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.sendgrid.net'
-EMAIL_PORT = 2525
+# === Email Configuration for Gmail SMTP ===
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'  # Use Django's SMTP backend
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'apikey'
-EMAIL_HOST_PASSWORD = config('SENDGRID_API_KEY')
-SENDGRID_SENDER_EMAIL = config('SENDGRID_SENDER_EMAIL', default='ogunsemorepresh@gmail.com')
-DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default=SENDGRID_SENDER_EMAIL)
+EMAIL_USE_SSL = False  
+EMAIL_HOST_USER = config('EMAIL_HOST_USER')  # Your Gmail address
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')  # Your Google App Password
 
-# SSL Certificates for requests (e.g., external API calls)
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default=EMAIL_HOST_USER)
+
+# SSL context for external requests (e.g., APIs)
 ssl_context = ssl.create_default_context(cafile=certifi.where())
 
-# Django REST Framework and JWT
+# Django REST Framework + JWT configuration
 REST_USE_JWT = True
 
 REST_FRAMEWORK = {
@@ -181,20 +178,20 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
-# CORS settings - restrict in production
+# CORS settings
 if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = True
 else:
     CORS_ALLOW_ALL_ORIGINS = False
     CORS_ALLOWED_ORIGINS = config(
         'CORS_ALLOWED_ORIGINS',
-        default='https://your-production-frontend.com',
+        default='https://waya-fawn.vercel.app',
         cast=Csv()
     )
 
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:8000')
 
-# Social Account Providers
+# Social Account Providers configuration
 SOCIALACCOUNT_PROVIDERS = {
     'google': {
         'APP': {
@@ -202,20 +199,47 @@ SOCIALACCOUNT_PROVIDERS = {
             'secret': config('GOOGLE_CLIENT_SECRET'),
             'key': ''
         }
-    }
+    },
+    # Add other providers as needed
 }
 
-# Security Headers (for production)
+# Security headers and SSL settings
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 SECURE_SSL_REDIRECT = not DEBUG
 
-# Optional: Additional security settings for production
 if not DEBUG:
     SECURE_HSTS_SECONDS = 3600
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_BROWSER_XSS_FILTER = True
+    X_FRAME_OPTIONS = 'DENY'
 
+# Logging configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '[{asctime}] {levelname} {name} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+}

@@ -5,8 +5,16 @@ from django.utils.http import urlsafe_base64_decode
 from django.utils.encoding import force_str
 import requests
 from rest_framework.response import Response
+from django.contrib.sites.shortcuts import get_current_site
+from django.urls import reverse
+from django.utils.http import urlsafe_base64_encode
+from django.utils.encoding import force_bytes
+from django.core.mail import send_mail
+from .models import SocialLoginAccount
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework import generics, status, permissions
+from users.models import EmailVerification
+from django.utils import timezone
 from users.serializers import (
     UserRegistrationSerializer,
     UserLoginSerializer,
@@ -18,23 +26,38 @@ from users.serializers import (
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.http import JsonResponse
-from .signals import send_verification_email
 from django.contrib.auth import get_user_model
 from django.conf import settings
 
 from rest_framework.views import APIView
 
+
 User = get_user_model()
 
-
-class UserRegistrationView(generics.CreateAPIView):
+class UserRegistrationView(generics.CreateAPIView): 
     serializer_class = UserRegistrationSerializer
     permission_classes = [AllowAny]
 
     def perform_create(self, serializer):
         user = serializer.save()
-        send_verification_email(user)  # Ensure your signal handles async or errors gracefully
 
+        domain = getattr(settings, 'DOMAIN', None) or get_current_site(self.request).domain
+
+        uidb64 = urlsafe_base64_encode(force_bytes(str(user.id)))
+        token = user.email_verifications.latest('created_at').token  # Get latest token
+
+        verification_link = f"https://{domain}{reverse('verify-email')}?uidb64={uidb64}&token={token}"
+
+        # Send verification email
+        subject = "Verify Your Waya Account"
+        message = f"Click the link to verify your email: {verification_link}"
+        send_mail(
+            subject,
+            message,
+            settings.DEFAULT_FROM_EMAIL,
+            [user.email],
+            fail_silently=False,
+        )
 
 class UserLoginView(generics.GenericAPIView):
     serializer_class = UserLoginSerializer
@@ -112,17 +135,29 @@ class EmailVerificationView(APIView):
         token = serializer.validated_data['token']
 
         try:
+            # Decode user ID from uidb64
             uid = force_str(urlsafe_base64_decode(uidb64))
             user = User.objects.get(pk=uid)
-        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            
+            # Find the EmailVerification token for this user
+            email_verification = EmailVerification.objects.get(
+                user=user,
+                token=token,
+                verified=False
+            )
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist, EmailVerification.DoesNotExist):
             return Response({"detail": "Invalid verification link."}, status=status.HTTP_400_BAD_REQUEST)
 
-        if default_token_generator.check_token(user, token):
-            user.is_verified = True
-            user.save()
-            return Response({"message": "Email verified successfully."})
-        else:
-            return Response({"detail": "Invalid or expired token."}, status=status.HTTP_400_BAD_REQUEST)
+        # Check if token is expired
+        if email_verification.is_expired():
+            return Response({"detail": "Verification link has expired."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Mark user as verified and token as used
+        user.is_verified = True
+        user.save()
+        email_verification.mark_as_verified()
+
+        return Response({"message": "Email verified successfully!"}, status=status.HTTP_200_OK)
 
 
 class ForgotPasswordView(generics.GenericAPIView):
@@ -151,7 +186,6 @@ class ResetPasswordConfirmView(generics.GenericAPIView):
 def home(request):
     return JsonResponse({"message": "Welcome to the Waya Backend API"})
 
-User = get_user_model()
 
 class GoogleLoginView(APIView):
     def post(self, request):
@@ -159,24 +193,39 @@ class GoogleLoginView(APIView):
         if not id_token:
             return Response({'error': 'Missing ID token'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Verify the ID token with Google
+        # Verify the token with Google
         google_response = requests.get(f"https://oauth2.googleapis.com/tokeninfo?id_token={id_token}")
         if google_response.status_code != 200:
             return Response({'error': 'Invalid ID token'}, status=status.HTTP_400_BAD_REQUEST)
 
         user_info = google_response.json()
         email = user_info.get('email')
-        if not email:
-            return Response({'error': 'Google account has no email'}, status=status.HTTP_400_BAD_REQUEST)
+        uid = user_info.get('sub')
 
-        # Create user if doesn't exist
-        user, created = User.objects.get_or_create(email=email)
-        if created:
-            user.username = email.split('@')[0]
-            user.set_unusable_password()
-            user.save()
+        if not email or not uid:
+            return Response({'error': 'Invalid Google token: missing email or uid'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Create JWT tokens for the user
+        try:
+            # Check if UID already exists
+            social_account = SocialLoginAccount.objects.get(provider='google', uid=uid)
+            user = social_account.user
+        except SocialLoginAccount.DoesNotExist:
+            # Check if a user with the same email exists
+            user, created = User.objects.get_or_create(email=email)
+            if created:
+                user.username = email.split('@')[0]
+                user.set_unusable_password()
+                user.save()
+
+            # Create new social account link
+            SocialLoginAccount.objects.create(
+                user=user,
+                provider='google',
+                uid=uid,
+                extra_data=user_info
+            )
+
+        # Generate JWT tokens
         refresh = RefreshToken.for_user(user)
 
         return Response({
