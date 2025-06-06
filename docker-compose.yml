@@ -14,7 +14,7 @@ services:
     command: >
       sh -c "
              python3 ./manage.py migrate &&
-             gunicorn -c gunicorn_config.py config.wsgi:application"    
+             gunicorn -c gunicorn_config.py waya_backend.wsgi:application"    
     env_file:
       - ./.env
     restart: always

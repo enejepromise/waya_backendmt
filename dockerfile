@@ -37,5 +37,5 @@ RUN pip install --upgrade "setuptools<81"
 EXPOSE 3000
 
 # Use the gunicorn_config.py as the Gunicorn configuration file
-CMD ["gunicorn", "-c", "gunicorn_config.py", "config.wsgi:application"]
+CMD ["gunicorn", "-c", "gunicorn_config.py", "waya_backend.wsgi:application"]
 
