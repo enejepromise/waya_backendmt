@@ -102,21 +102,28 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'waya_backend.wsgi.application'
 
-# Database configuration with SSL fix for localhost
-DATABASE_URL = config('DATABASE_URL')
-
-if 'localhost' in DATABASE_URL or '127.0.0.1' in DATABASE_URL:
-    ssl_require = False
-else:
-    ssl_require = not DEBUG
-
 DATABASES = {
-    'default': dj_database_url.parse(
-        DATABASE_URL,
-        conn_max_age=600,
-        ssl_require=ssl_require
-    )
-}
+            'default': {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': BASE_DIR / 'db.sqlite3'
+            }
+        }
+
+# # Database configuration with SSL fix for localhost
+# DATABASE_URL = config('DATABASE_URL')
+
+# if 'localhost' in DATABASE_URL or '127.0.0.1' in DATABASE_URL:
+#     ssl_require = False
+# else:
+#     ssl_require = not DEBUG
+
+# DATABASES = {
+#     'default': dj_database_url.parse(
+#         DATABASE_URL,
+#         conn_max_age=600,
+#         ssl_require=ssl_require
+#     )
+# }
 
 # Celery configuration
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
