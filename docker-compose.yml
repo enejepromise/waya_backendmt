@@ -1,0 +1,20 @@
+version: "3.7"
+
+services:
+  web:
+    build:
+      context: .
+      args:
+        PORT: 3000
+    ports:
+      - 3000:3000
+    volumes:
+      - .:/app
+      - ./media:/media
+    command: >
+      sh -c "
+             python3 ./manage.py migrate &&
+             gunicorn -c gunicorn_config.py config.wsgi:application"    
+    env_file:
+      - ./.env
+    restart: always
